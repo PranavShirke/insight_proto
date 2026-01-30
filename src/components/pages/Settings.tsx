@@ -1,13 +1,14 @@
 
-import { useState } from 'react';
-import { User, Mail, Bell, Globe, Instagram, Linkedin, Twitter, Facebook, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Mail, Bell, Globe, Instagram, Linkedin, Twitter, Facebook, Save, Youtube } from 'lucide-react';
 
 const Settings = () => {
     const [connectedAccounts, setConnectedAccounts] = useState({
         instagram: { connected: true, handle: '@alexmorgan_design' },
         twitter: { connected: false, handle: '' },
         linkedin: { connected: true, handle: 'alex-morgan-pro' },
-        facebook: { connected: false, handle: '' }
+        facebook: { connected: false, handle: '' },
+        youtube: { connected: false, handle: '' }
     });
 
     const [inputs, setInputs] = useState({
@@ -17,7 +18,46 @@ const Settings = () => {
         facebook: ''
     });
 
+    useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                // Fetch real status from backend
+                const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/status', { credentials: 'include' });
+                if (res.ok) {
+                    const status = await res.json();
+                    setConnectedAccounts(prev => ({
+                        ...prev,
+                        youtube: { connected: status.google, handle: status.google ? (status.user || 'Connected User') : '' },
+                        instagram: { connected: status.facebook, handle: status.facebook ? 'Connected User' : '' },
+                        facebook: { connected: status.facebook, handle: status.facebook ? 'Connected User' : '' }
+                    }));
+                }
+            } catch (e) {
+                console.error("Failed to check status", e);
+            }
+        };
+
+        checkStatus();
+
+        // Optional: clear query params to keep URL clean
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('connected')) {
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }, []);
+
     const handleConnect = (platform: string) => {
+        if (platform === 'youtube') {
+            window.location.href = 'https://3c0l7m9w-5000.inc1.devtunnels.ms/auth/google';
+            return;
+        }
+        if (platform === 'facebook' || platform === 'instagram') {
+            // Instagram Graph API works via Facebook Login
+            window.location.href = 'https://3c0l7m9w-5000.inc1.devtunnels.ms/auth/facebook';
+            return;
+        }
+
+        // Fallback for others (demo only)
         setConnectedAccounts(prev => {
             const current = prev[platform as keyof typeof connectedAccounts];
             return {
@@ -89,6 +129,32 @@ const Settings = () => {
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">
+                    {/* YouTube */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-dark-bg border border-white/5 rounded-xl gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-lg bg-red-600/10 flex items-center justify-center shrink-0">
+                                <Youtube className="text-red-600 w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-medium text-white">YouTube</h3>
+                                {connectedAccounts.youtube.connected ? (
+                                    <p className="text-xs text-green-400 flex items-center gap-1">Connected as {connectedAccounts.youtube.handle}</p>
+                                ) : (
+                                    <p className="text-xs text-dark-muted">Connect channel for analytics</p>
+                                )}
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => handleConnect('youtube')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 ${connectedAccounts.youtube.connected
+                                ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                                : 'bg-brand-primary/10 text-brand-primary hover:bg-brand-primary/20'
+                                }`}
+                        >
+                            {connectedAccounts.youtube.connected ? 'Disconnect' : 'Connect Account'}
+                        </button>
+                    </div>
+
                     {/* Instagram */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-dark-bg border border-white/5 rounded-xl gap-4">
                         <div className="flex items-center gap-4">

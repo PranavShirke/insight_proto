@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
     MessageSquare,
     Send,
@@ -32,20 +32,30 @@ const AskAI = () => {
         setQuery('');
         setIsTyping(true);
 
-        // Simulate AI delay
-        setTimeout(() => {
-            const aiMsg = { role: 'ai' as const, content: generateResponse(text) };
-            setHistory(prev => [...prev, aiMsg]);
-            setIsTyping(false);
-        }, 1500);
-    };
+        try {
+            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    feature_type: 'ask-ai',
+                    query: text
+                })
+            });
+            const data = await res.json();
 
-    const generateResponse = (text: string) => {
-        const t = text.toLowerCase();
-        if (t.includes('best') || t.includes('highest')) return "Your Reel titled 'Morning Routine' posted on Jan 12th had the highest engagement (12.4%), driven by 450 shares.";
-        if (t.includes('time') || t.includes('when')) return "Based on your audience activity, the best time to post is between 6 PM and 8 PM EST on Weekdays.";
-        if (t.includes('compare') || t.includes('vs')) return "Reels are outperforming Carousels by 320% in engagement, but Carousels have a 15% higher save rate.";
-        return "That's an interesting question. Reviewing your data... It seems your overall engagement is up 12% this month compared to last month. Keep focusing on short-form video content!";
+            const aiMsg = { role: 'ai' as const, content: data.answer || "I'm having trouble thinking right now." };
+            setHistory(prev => [...prev, aiMsg]);
+
+            // Optional: Handle follow-up questions if you want to display them
+            // if (data.follow_up) { ... }
+
+        } catch (e) {
+            console.error(e);
+            setHistory(prev => [...prev, { role: 'ai' as const, content: "Sorry, I encountered an error." }]);
+        } finally {
+            setIsTyping(false);
+        }
     };
 
     useEffect(() => {
@@ -70,7 +80,7 @@ const AskAI = () => {
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto mb-24 custom-scrollbar pr-4" ref={scrollRef}>
                 {history.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full -mt-20">
+                    <div className="flex flex-col items-center justify-center h-full">
                         {/* Empty State / Suggestions */}
                         <div className="relative mb-8">
                             <div className="absolute inset-0 bg-brand-primary/40 blur-[40px] rounded-full" />
@@ -107,8 +117,8 @@ const AskAI = () => {
                                     </div>
                                 )}
                                 <div className={`p-4 rounded-2xl max-w-[80%] ${msg.role === 'user'
-                                        ? 'bg-brand-primary text-black font-medium rounded-tr-none'
-                                        : 'bg-white/10 text-gray-200 border border-white/5 rounded-tl-none'
+                                    ? 'bg-brand-primary text-black font-medium rounded-tr-none'
+                                    : 'bg-white/10 text-gray-200 border border-white/5 rounded-tl-none'
                                     }`}>
                                     {msg.content}
                                 </div>
