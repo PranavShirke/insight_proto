@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useInsights } from '../../hooks/useInsights';
+import { useAuth } from '../../context/AuthContext';
 import {
     Loader, RefreshCw, Search, Globe, Send,
     Heart,
@@ -49,7 +50,16 @@ const AI_QUERIES = [
 ];
 
 const ModernDashboard = () => {
+    const { user } = useAuth();
     const [activePlatform, setActivePlatform] = useState('All');
+
+    // Dynamic Filter Options
+    const platformOptions = ['All'];
+    if (user?.connections?.instagram) platformOptions.push('Instagram');
+    if (user?.connections?.facebook) platformOptions.push('Facebook');
+    if (user?.connections?.youtube) platformOptions.push('Youtube');
+    if (user?.connections?.twitter) platformOptions.push('Twitter');
+
     const { data, loading, refresh, saveAiAnalysis } = useInsights(); // Added saveAiAnalysis
 
     // AI State
@@ -88,6 +98,8 @@ const ModernDashboard = () => {
         // Filter Logic
         const showYoutube = activePlatform === 'All' || activePlatform === 'Youtube';
         const showInstagram = activePlatform === 'All' || activePlatform === 'Instagram';
+        const showFacebook = activePlatform === 'All' || activePlatform === 'Facebook';
+        const showTwitter = activePlatform === 'All' || activePlatform === 'Twitter';
 
         if (data.youtube && showYoutube) {
             totalReach += parseInt(data.youtube.views || 0);
@@ -98,25 +110,38 @@ const ModernDashboard = () => {
         }
 
         if (data.instagram && showInstagram) {
-            // Instagram reach is tricky, summing insights if available or using followers as proxy for potential reach if insight missing
-            // But let's use followers for now as 'Reach' often distinct. The API gives insights[0].values[...] for reach.
-            // Simplified: Use followers for reach proxy if reach is 0? No, let's just stick to what we have.
             totalFollowers += (data.instagram.followers || 0);
             totalPosts += (data.instagram.posts || 0);
             totalEngagement += (data.instagram.engagement || 0);
             totalComments += (data.instagram.totalComments || 0);
 
-            // Try to extract Reach from insights array
+            // Reach logic
             if (data.instagram.insights) {
                 const reachMetric = data.instagram.insights.find((i: any) => i.name === 'reach');
                 if (reachMetric && reachMetric.values?.[0]?.value) {
                     totalReach += reachMetric.values[0].value;
                 } else {
-                    totalReach += (data.instagram.followers || 0); // Fallback
+                    totalReach += (data.instagram.followers || 0);
                 }
             } else {
                 totalReach += (data.instagram.followers || 0);
             }
+        }
+
+        if (data.facebook && showFacebook) {
+            totalFollowers += (data.facebook.followers || 0);
+            totalPosts += (data.facebook.posts || 0);
+            totalEngagement += (data.facebook.engagement || 0);
+            totalComments += (data.facebook.totalComments || 0);
+            totalReach += (data.facebook.followers || 0); // Proxy
+        }
+
+        if (data.twitter && showTwitter) {
+            totalFollowers += (data.twitter.followers || 0);
+            totalPosts += (data.twitter.posts || 0);
+            totalEngagement += (data.twitter.engagement || 0);
+            totalComments += (data.twitter.totalComments || 0);
+            totalReach += (data.twitter.followers || 0); // Proxy
         }
 
         const engagementRate = totalReach > 0 ? ((totalEngagement / totalReach) * 100).toFixed(2) : '0';
@@ -131,7 +156,7 @@ const ModernDashboard = () => {
         setDisplayStats(newStats);
 
         // Auto-Trigger AI if data exists but no AI response (check both state and data prop to avoid race condition)
-        if ((data.youtube || data.instagram) && !aiResponse && !data.aiAnalysis && !aiLoading) {
+        if ((data.youtube || data.instagram || data.facebook || data.twitter) && !aiResponse && !data.aiAnalysis && !aiLoading) {
             const customQuery = "Generate a summary of my performance based on these stats.";
             setAiQuery(customQuery);
             // We need to call the function, but state update is async. 
@@ -147,7 +172,7 @@ const ModernDashboard = () => {
         if (!queryText) return;
         setAiLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -187,21 +212,22 @@ const ModernDashboard = () => {
                         <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
                     </button>
 
-                    {/* Platform Toggles - Glass Pill */}
-                    <div className="flex p-1 bg-white/5 backdrop-blur-lg rounded-xl border border-white/10">
-                        {['All', 'Instagram', 'Youtube'].map((platform) => (
+                    {/* Platform Filters */}
+                    <div className="flex gap-2">
+                        {platformOptions.map((platform) => (
                             <button
                                 key={platform}
                                 onClick={() => setActivePlatform(platform)}
-                                className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide transition-all ${activePlatform === platform
-                                    ? 'bg-brand-primary text-black shadow-lg shadow-cyan-500/20'
-                                    : 'text-gray-400 hover:text-white'
+                                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${activePlatform === platform
+                                    ? 'bg-white/10 text-white border border-white/10'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
                                     }`}
                             >
                                 <div className="flex items-center gap-2">
                                     {platform === 'All' && <Globe size={14} />}
                                     {platform === 'Instagram' && <Instagram size={14} />}
                                     {platform === 'Youtube' && <Youtube size={14} />}
+                                    {platform === 'Twitter' && <Send size={14} className="rotate-[-45deg]" />}
                                     {platform}
                                 </div>
                             </button>

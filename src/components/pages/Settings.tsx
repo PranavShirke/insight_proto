@@ -1,12 +1,14 @@
 
 import { useState, useEffect } from 'react';
 import { User, Mail, Bell, Globe, Instagram, Linkedin, Twitter, Facebook, Save, Youtube } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const Settings = () => {
+    const { user } = useAuth();
     const [connectedAccounts, setConnectedAccounts] = useState({
-        instagram: { connected: true, handle: '@alexmorgan_design' },
+        instagram: { connected: false, handle: '' },
         twitter: { connected: false, handle: '' },
-        linkedin: { connected: true, handle: 'alex-morgan-pro' },
+        linkedin: { connected: false, handle: '' }, // Demo
         facebook: { connected: false, handle: '' },
         youtube: { connected: false, handle: '' }
     });
@@ -19,41 +21,50 @@ const Settings = () => {
     });
 
     useEffect(() => {
-        const checkStatus = async () => {
-            try {
-                // Fetch real status from backend
-                const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/status', { credentials: 'include' });
-                if (res.ok) {
-                    const status = await res.json();
-                    setConnectedAccounts(prev => ({
-                        ...prev,
-                        youtube: { connected: status.google, handle: status.google ? (status.user || 'Connected User') : '' },
-                        instagram: { connected: status.facebook, handle: status.facebook ? 'Connected User' : '' },
-                        facebook: { connected: status.facebook, handle: status.facebook ? 'Connected User' : '' }
-                    }));
+        if (user) {
+            setConnectedAccounts(prev => ({
+                ...prev,
+                youtube: {
+                    connected: !!user.connections?.youtube,
+                    handle: user.connections?.youtube ? (user.fullName || 'Connected') : ''
+                },
+                instagram: {
+                    connected: !!user.connections?.instagram,
+                    handle: user.connections?.instagram ? 'Connected' : ''
+                },
+                facebook: {
+                    connected: !!user.connections?.facebook,
+                    handle: user.connections?.facebook ? 'Connected' : ''
+                },
+                twitter: {
+                    connected: !!user.connections?.twitter,
+                    handle: user.connections?.twitter ? 'Connected' : ''
                 }
-            } catch (e) {
-                console.error("Failed to check status", e);
-            }
-        };
-
-        checkStatus();
+            }));
+        }
 
         // Optional: clear query params to keep URL clean
         const params = new URLSearchParams(window.location.search);
         if (params.get('connected')) {
             window.history.replaceState({}, '', window.location.pathname);
         }
-    }, []);
+    }, [user]);
 
     const handleConnect = (platform: string) => {
         if (platform === 'youtube') {
-            window.location.href = 'https://3c0l7m9w-5000.inc1.devtunnels.ms/auth/google';
+            window.location.href = 'https://localhost:5000/auth/google';
             return;
         }
-        if (platform === 'facebook' || platform === 'instagram') {
-            // Instagram Graph API works via Facebook Login
-            window.location.href = 'https://3c0l7m9w-5000.inc1.devtunnels.ms/auth/facebook';
+        if (platform === 'facebook') {
+            window.location.href = 'https://localhost:5000/auth/facebook'; // Will default to facebook state
+            return;
+        }
+        if (platform === 'instagram') {
+            window.location.href = 'https://localhost:5000/auth/instagram';
+            return;
+        }
+        if (platform === 'twitter') {
+            window.location.href = 'https://localhost:5000/auth/twitter';
             return;
         }
 

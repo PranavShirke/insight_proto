@@ -8,7 +8,9 @@ import {
     Instagram,
     Youtube,
     Linkedin,
-    Loader
+    Twitter,
+    Loader,
+    Facebook
 } from 'lucide-react';
 import {
     BarChart,
@@ -22,8 +24,7 @@ import {
 } from 'recharts';
 import { motion } from 'framer-motion';
 import { useInsights } from '../../hooks/useInsights';
-
-const PLATFORMS = ['All Platforms', 'Instagram', 'YouTube', 'LinkedIn'];
+import { useAuth } from '../../context/AuthContext';
 
 const PERFORMANCE_DATA = [
     { name: 'Mon', Reels: 4000, Carousels: 2400, Static: 2400 },
@@ -66,8 +67,31 @@ const COMPARISON_CARDS = [
 ];
 
 const ContentComparison = () => {
+    const { user } = useAuth();
     const { data, loading } = useInsights();
-    const [activePlatform, setActivePlatform] = useState('All Platforms');
+
+    // Determine available platforms
+    const availablePlatforms = [{ id: 'all', label: 'All Platforms', icon: Globe }];
+    if (user?.connections?.instagram) availablePlatforms.push({ id: 'instagram', label: 'Instagram', icon: Instagram });
+    if (user?.connections?.facebook) availablePlatforms.push({ id: 'facebook', label: 'Facebook', icon: Facebook });
+    if (user?.connections?.youtube) availablePlatforms.push({ id: 'youtube', label: 'YouTube', icon: Youtube });
+    if (user?.connections?.twitter) availablePlatforms.push({ id: 'twitter', label: 'Twitter', icon: Twitter });
+
+    // Always keep LinkedIn for demo/mock if needed, or hide if we want strict real data.
+    // Making it strict:
+    if (user?.connections?.twitter) { /* Just ensuring logic is consistent */ }
+
+    const [activePlatform, setActivePlatform] = useState({ id: 'all', label: 'All Platforms', icon: Globe });
+
+    useEffect(() => {
+        // Fix: Use ID check instead of reference check to avoid infinite loop
+        const isValid = availablePlatforms.some(p => p.id === activePlatform.id);
+        if (!isValid) {
+            setActivePlatform({ id: 'all', label: 'All Platforms', icon: Globe });
+        }
+        // Remove activePlatform from dependency to avoid loop if object ref changes
+        // Actually, we only need to check when availablePlatforms changes (user connects/disconnects)
+    }, [user, availablePlatforms.length]); // Use length or user as proxy
 
     // State for dynamic data
     const [performanceData, setPerformanceData] = useState(PERFORMANCE_DATA);
@@ -75,9 +99,27 @@ const ContentComparison = () => {
     const [topFormat, setTopFormat] = useState({ type: 'Reels', engagement: '8.5%' });
 
     useEffect(() => {
-        if (data?.instagram?.recent_posts) {
-            const posts = data.instagram.recent_posts;
+        let allPosts: any[] = [];
 
+        if (data?.instagram?.recent_posts) allPosts = [...allPosts, ...data.instagram.recent_posts];
+        if (data?.facebook?.recent_posts) allPosts = [...allPosts, ...data.facebook.recent_posts];
+        if (data?.twitter?.recent_posts) allPosts = [...allPosts, ...data.twitter.recent_posts];
+
+        let postsToProcess: any[] = [];
+
+        if (activePlatform.id === 'all') {
+            postsToProcess = allPosts;
+        } else if (activePlatform.id === 'instagram') {
+            postsToProcess = data?.instagram?.recent_posts || [];
+        } else if (activePlatform.id === 'facebook') {
+            postsToProcess = data?.facebook?.recent_posts || [];
+        } else if (activePlatform.id === 'twitter') {
+            postsToProcess = data?.twitter?.recent_posts || [];
+        } else if (activePlatform.id === 'youtube') {
+            postsToProcess = []; // No posts for YT yet
+        }
+
+        if (postsToProcess.length > 0) {
             // 1. Process Chart Data (Weekly Trend)
             const daysMap = { 'Mon': 0, 'Tue': 1, 'Wed': 2, 'Thu': 3, 'Fri': 4, 'Sat': 5, 'Sun': 6 };
             const newChartData = [
@@ -97,10 +139,11 @@ const ContentComparison = () => {
                 IMAGE: { type: 'Static', icon: ImageIcon, count: 0, engagement: 0, color: '#64748b' }
             };
 
-            posts.forEach((post: any) => {
+            postsToProcess.forEach((post: any) => {
                 const date = new Date(post.timestamp);
                 const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
                 const engagement = (post.likes || 0) + (post.comments || 0);
+                // Map basic types for other platforms if added later
                 const type = post.type as keyof typeof stats;
 
                 // Update Chart
@@ -148,8 +191,8 @@ const ContentComparison = () => {
 
             setComparisonCards(newCards);
             setTopFormat({ type: winner.type, engagement: winner.engagement });
-        }
-    }, [data]);
+        } // End if filteredPosts > 0
+    }, [data, activePlatform]);
 
     if (loading && !data) {
         return (
@@ -171,27 +214,6 @@ const ContentComparison = () => {
                     <p className="text-gray-400 mt-1">Compare performance across Reels, Carousels, and Static posts</p>
                 </div>
 
-                {/* Platform Toggles */}
-                <div className="flex p-1 bg-[#1e1e2d] rounded-full border border-white/5">
-                    {PLATFORMS.map((platform) => (
-                        <button
-                            key={platform}
-                            onClick={() => setActivePlatform(platform)}
-                            className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activePlatform === platform
-                                ? 'bg-[#06b6d4] text-white shadow-lg shadow-cyan-500/20'
-                                : 'text-gray-400 hover:text-white'
-                                }`}
-                        >
-                            <div className="flex items-center gap-2">
-                                {platform === 'All Platforms' && <Globe size={14} />}
-                                {platform === 'Instagram' && <Instagram size={14} />}
-                                {platform === 'YouTube' && <Youtube size={14} />}
-                                {platform === 'LinkedIn' && <Linkedin size={14} />}
-                                {platform === 'All Platforms' ? 'All' : platform}
-                            </div>
-                        </button>
-                    ))}
-                </div>
             </div>
 
             {/* Top Performing Format Highlight */}

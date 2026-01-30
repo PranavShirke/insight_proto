@@ -37,7 +37,22 @@ const User = sequelize.define('User', {
     // Facebook (Instagram) Tokens
     facebookId: DataTypes.STRING,
     facebookAccessToken: DataTypes.STRING,
-    facebookName: DataTypes.STRING
+    facebookName: DataTypes.STRING,
+
+    // Detailed Connection Flags
+    isInstagramConnected: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    isFacebookConnected: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+
+    // Twitter Tokens
+    twitterId: DataTypes.STRING,
+    twitterAccessToken: DataTypes.STRING,
+    twitterName: DataTypes.STRING
 });
 
 // Sync and Seed

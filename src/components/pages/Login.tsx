@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
     const navigate = useNavigate();
-    const { checkAuth } = useAuth();
+    const { checkAuth, login } = useAuth();
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -17,7 +17,7 @@ const Login = () => {
         setError('');
 
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/auth/login', {
+            const res = await fetch('https://localhost:5000/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -28,11 +28,14 @@ const Login = () => {
                 const data = await res.json();
                 login({
                     username: formData.username,
-                    fullName: data.user, // Assuming backend returns display name
-                    email: '' // We don't have email in login response yet, but AuthContext handles partials if we want, or we can fetch it. For now, useAuth checkAuth will fill it on reload, or we can update backend login response.
-                    // Actually, let's just navigate. checkAuth might run or we can rely on subsequent calls. 
-                    // Better: Update backend login to return full user object.
-                    // For now, minimal:
+                    fullName: data.user,
+                    email: '',
+                    connections: {
+                        youtube: data.connections.google,
+                        instagram: data.connections.instagram,
+                        facebook: data.connections.facebook,
+                        twitter: data.connections.twitter
+                    }
                 });
                 navigate('/app');
             } else {

@@ -45,7 +45,7 @@ const TrendRadar = ({ stats }: { stats: any }) => {
 
         setTrendLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -188,7 +188,7 @@ const ContentDNAView = ({ stats }: { stats: any }) => {
     const handleDnaScan = async () => {
         setDnaLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -304,7 +304,7 @@ const AudienceCloneView = ({ stats }: { stats: any }) => {
     const handleAudienceScan = async () => {
         setAudienceLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -436,7 +436,7 @@ const CaptionWizardView = ({ stats }: { stats: any }) => {
         if (!captionInput) return;
         setCaptionLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -534,7 +534,7 @@ const PostMortemView = ({ stats }: { stats: any }) => {
         if (!pmInput) return;
         setPmLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -658,7 +658,7 @@ const CompetitorGhostView = () => {
         if (!ghostInput) return;
         setGhostLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -782,7 +782,7 @@ const ContentStrategyView = ({ stats }: { stats: any }) => {
         if (!strategyInput) return;
         setStrategyLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -896,7 +896,7 @@ const ComparisonView = ({ stats }: { stats: any }) => {
         if (!compInput) return;
         setCompLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -1027,7 +1027,7 @@ const SmartSchedulingView = ({ stats }: { stats: any }) => {
     const handleOptimize = async () => {
         setSchedLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -1162,7 +1162,7 @@ const AIFeatures = () => {
         if (!viralInput) return;
         setViralLoading(true);
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

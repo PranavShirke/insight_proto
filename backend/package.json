@@ -23,6 +23,8 @@
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-local": "^1.0.0",
+    "passport-twitter": "^1.0.4",
+    "selfsigned": "^5.5.0",
     "sequelize": "^6.37.7",
     "sqlite3": "^5.1.7"
   },

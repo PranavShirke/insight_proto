@@ -33,7 +33,7 @@ const AskAI = () => {
         setIsTyping(true);
 
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

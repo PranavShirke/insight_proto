@@ -71,7 +71,7 @@ const Reports = () => {
             const viralCtx = localStorage.getItem(STORAGE_KEY_PREFIX + 'viral') || "{}";
             const audienceCtx = localStorage.getItem(STORAGE_KEY_PREFIX + 'audience') || "{}";
 
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/analyze', {
+            const res = await fetch('https://localhost:5000/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

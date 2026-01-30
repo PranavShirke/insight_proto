@@ -62,7 +62,7 @@ const DetailedAnalysis = () => {
             : manualUrl;
 
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/ai/deep-analysis', {
+            const res = await fetch('https://localhost:5000/api/ai/deep-analysis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

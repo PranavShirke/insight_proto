@@ -5,6 +5,12 @@ interface User {
     username: string;
     fullName: string;
     email?: string;
+    connections?: {
+        instagram?: boolean;
+        youtube?: boolean;
+        twitter?: boolean;
+        facebook?: boolean;
+    };
 }
 
 interface AuthContextType {
@@ -23,7 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const checkAuth = async () => {
         try {
-            const res = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/status', {
+            const res = await fetch('https://localhost:5000/api/status', {
                 credentials: 'include'
             });
             if (res.ok) {
@@ -31,8 +37,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (data.authenticated) {
                     setUser({
                         username: data.username,
-                        fullName: data.user, // The API returns 'user' as the display name (fullName or username)
-                        email: data.email
+                        fullName: data.user,
+                        email: data.email,
+                        connections: {
+                            youtube: data.connections.google,     // Map Google -> YouTube
+                            instagram: data.connections.instagram,// Direct map
+                            facebook: data.connections.facebook,  // Direct map
+                            twitter: data.connections.twitter
+                        }
                     });
                 } else {
                     setUser(null);

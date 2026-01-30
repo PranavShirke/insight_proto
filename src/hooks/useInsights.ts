@@ -6,6 +6,8 @@ const CACHE_DURATION = 15 * 60 * 1000; // 15 Minutes
 export interface InsightData {
     youtube?: any;
     instagram?: any;
+    facebook?: any;
+    twitter?: any;
     aiAnalysis?: any;
     lastUpdated: number;
 }
@@ -23,18 +25,30 @@ export const useInsights = () => {
 
             // Fetch YouTube
             try {
-                const ytRes = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/insights/youtube', { credentials: 'include' });
+                const ytRes = await fetch('https://localhost:5000/api/insights/youtube', { credentials: 'include' });
                 if (ytRes.ok) newData.youtube = await ytRes.json();
             } catch (e) { console.warn('YouTube fetch failed', e); }
 
             // Fetch Instagram
             try {
-                const igRes = await fetch('https://3c0l7m9w-5000.inc1.devtunnels.ms/api/insights/instagram', { credentials: 'include' });
+                const igRes = await fetch('https://localhost:5000/api/insights/instagram', { credentials: 'include' });
                 if (igRes.ok) newData.instagram = await igRes.json();
             } catch (e) { console.warn('Instagram fetch failed', e); }
 
+            // Fetch Facebook
+            try {
+                const fbRes = await fetch('https://localhost:5000/api/insights/facebook', { credentials: 'include' });
+                if (fbRes.ok) newData.facebook = await fbRes.json();
+            } catch (e) { console.warn('Facebook fetch failed', e); }
+
+            // Fetch Twitter
+            try {
+                const twRes = await fetch('https://localhost:5000/api/insights/twitter', { credentials: 'include' });
+                if (twRes.ok) newData.twitter = await twRes.json();
+            } catch (e) { console.warn('Twitter fetch failed', e); }
+
             // Save to State & LocalStorage
-             if (newData.youtube || newData.instagram) {
+             if (newData.youtube || newData.instagram || newData.facebook || newData.twitter) {
                  const finalData = newData as InsightData;
                  setData(finalData);
                  localStorage.setItem(STORAGE_KEY, JSON.stringify(finalData));
