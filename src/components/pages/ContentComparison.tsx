@@ -27,40 +27,40 @@ import { useInsights } from '../../hooks/useInsights';
 import { useAuth } from '../../context/AuthContext';
 
 const PERFORMANCE_DATA = [
-    { name: 'Mon', Reels: 4000, Carousels: 2400, Static: 2400 },
-    { name: 'Tue', Reels: 3000, Carousels: 1398, Static: 2210 },
-    { name: 'Wed', Reels: 2000, Carousels: 9800, Static: 2290 },
-    { name: 'Thu', Reels: 2780, Carousels: 3908, Static: 2000 },
-    { name: 'Fri', Reels: 1890, Carousels: 4800, Static: 2181 },
-    { name: 'Sat', Reels: 2390, Carousels: 3800, Static: 2500 },
-    { name: 'Sun', Reels: 3490, Carousels: 4300, Static: 2100 },
+    { name: 'Mon', Reels: 0, Carousels: 0, Static: 0 },
+    { name: 'Tue', Reels: 0, Carousels: 0, Static: 0 },
+    { name: 'Wed', Reels: 0, Carousels: 0, Static: 0 },
+    { name: 'Thu', Reels: 0, Carousels: 0, Static: 0 },
+    { name: 'Fri', Reels: 0, Carousels: 0, Static: 0 },
+    { name: 'Sat', Reels: 0, Carousels: 0, Static: 0 },
+    { name: 'Sun', Reels: 0, Carousels: 0, Static: 0 },
 ];
 
 const COMPARISON_CARDS = [
     {
         type: 'Reels',
         icon: Film,
-        engagement: '8.5%',
-        reach: '450K',
-        posts: 24,
+        engagement: '0%',
+        reach: '0',
+        posts: 0,
         color: '#a855f7', // Purple
-        winner: true
+        winner: false
     },
     {
         type: 'Carousels',
         icon: Layers,
-        engagement: '5.2%',
-        reach: '280K',
-        posts: 18,
+        engagement: '0%',
+        reach: '0',
+        posts: 0,
         color: '#06b6d4', // Cyan
         winner: false
     },
     {
         type: 'Static',
         icon: ImageIcon,
-        engagement: '2.8%',
-        reach: '150K',
-        posts: 35,
+        engagement: '0%',
+        reach: '0',
+        posts: 0,
         color: '#64748b', // Slate
         winner: false
     }
@@ -96,7 +96,7 @@ const ContentComparison = () => {
     // State for dynamic data
     const [performanceData, setPerformanceData] = useState(PERFORMANCE_DATA);
     const [comparisonCards, setComparisonCards] = useState(COMPARISON_CARDS);
-    const [topFormat, setTopFormat] = useState({ type: 'Reels', engagement: '8.5%' });
+    const [topFormat, setTopFormat] = useState({ type: '-', engagement: '0%' });
 
     useEffect(() => {
         let allPosts: any[] = [];
@@ -143,8 +143,12 @@ const ContentComparison = () => {
                 const date = new Date(post.timestamp);
                 const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
                 const engagement = (post.likes || 0) + (post.comments || 0);
-                // Map basic types for other platforms if added later
-                const type = post.type as keyof typeof stats;
+
+                // Map Instagram types to our Categories
+                let type: keyof typeof stats = 'IMAGE';
+                if (post.type === 'VIDEO') type = 'VIDEO';
+                else if (post.type === 'CAROUSEL_ALBUM') type = 'CAROUSEL_ALBUM';
+                else type = 'IMAGE';
 
                 // Update Chart
                 if (daysMap.hasOwnProperty(dayName)) {

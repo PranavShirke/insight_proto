@@ -10,7 +10,6 @@ import {
     CheckCircle2,
     ArrowLeft,
     Loader2,
-    Clock
 } from 'lucide-react';
 import { useInsights } from '../../hooks/useInsights';
 const STORAGE_KEY_PREFIX = 'insight_ai_feature_';
@@ -71,7 +70,7 @@ const Reports = () => {
             const viralCtx = localStorage.getItem(STORAGE_KEY_PREFIX + 'viral') || "{}";
             const audienceCtx = localStorage.getItem(STORAGE_KEY_PREFIX + 'audience') || "{}";
 
-            const res = await fetch('https://localhost:5000/api/ai/analyze', {
+            const res = await fetch('/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

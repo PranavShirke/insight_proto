@@ -25,25 +25,25 @@ export const useInsights = () => {
 
             // Fetch YouTube
             try {
-                const ytRes = await fetch('https://localhost:5000/api/insights/youtube', { credentials: 'include' });
+                const ytRes = await fetch('/api/insights/youtube', { credentials: 'include' });
                 if (ytRes.ok) newData.youtube = await ytRes.json();
             } catch (e) { console.warn('YouTube fetch failed', e); }
 
             // Fetch Instagram
             try {
-                const igRes = await fetch('https://localhost:5000/api/insights/instagram', { credentials: 'include' });
+                const igRes = await fetch('/api/insights/instagram', { credentials: 'include' });
                 if (igRes.ok) newData.instagram = await igRes.json();
             } catch (e) { console.warn('Instagram fetch failed', e); }
 
             // Fetch Facebook
             try {
-                const fbRes = await fetch('https://localhost:5000/api/insights/facebook', { credentials: 'include' });
+                const fbRes = await fetch('/api/insights/facebook', { credentials: 'include' });
                 if (fbRes.ok) newData.facebook = await fbRes.json();
             } catch (e) { console.warn('Facebook fetch failed', e); }
 
             // Fetch Twitter
             try {
-                const twRes = await fetch('https://localhost:5000/api/insights/twitter', { credentials: 'include' });
+                const twRes = await fetch('/api/insights/twitter', { credentials: 'include' });
                 if (twRes.ok) newData.twitter = await twRes.json();
             } catch (e) { console.warn('Twitter fetch failed', e); }
 

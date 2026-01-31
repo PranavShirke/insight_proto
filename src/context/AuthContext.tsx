@@ -1,6 +1,13 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+interface SocialAccount {
+    id: number;
+    platform: string;
+    username: string;
+    platformUserId: string;
+}
+
 interface User {
     username: string;
     fullName: string;
@@ -10,6 +17,7 @@ interface User {
         youtube?: boolean;
         twitter?: boolean;
         facebook?: boolean;
+        all?: SocialAccount[];
     };
 }
 
@@ -29,7 +37,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const checkAuth = async () => {
         try {
-            const res = await fetch('https://localhost:5000/api/status', {
+            const res = await fetch('/api/status', {
                 credentials: 'include'
             });
             if (res.ok) {
@@ -40,10 +48,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         fullName: data.user,
                         email: data.email,
                         connections: {
-                            youtube: data.connections.google,     // Map Google -> YouTube
-                            instagram: data.connections.instagram,// Direct map
-                            facebook: data.connections.facebook,  // Direct map
-                            twitter: data.connections.twitter
+                            youtube: data.connections.google,
+                            instagram: data.connections.instagram,
+                            facebook: data.connections.facebook,
+                            twitter: data.connections.twitter,
+                            all: data.connections.all || [] // Capture all accounts
                         }
                     });
                 } else {

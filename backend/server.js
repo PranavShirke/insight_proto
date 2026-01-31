@@ -5,17 +5,49 @@ import session from 'express-session';
 import passport from 'passport';
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as FacebookStrategy } from 'passport-facebook';
 import { Strategy as TwitterStrategy } from 'passport-twitter';
 import { Strategy as LocalStrategy } from 'passport-local';
+import { Strategy as OAuth2Strategy } from 'passport-oauth2';
 import bcrypt from 'bcrypt';
-import { initDB, User } from './database.js';
-import googleTrends from 'google-trends-api';
-import { GoogleGenAI } from "@google/genai";
+import { initDB, User, SocialAccount } from './database.js';
+import * as Agents from './agents/index.js';
+import nodemailer from 'nodemailer';
 
 dotenv.config();
+
+// Email Transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.APP_EMAIL,
+        pass: process.env.APP_PASSWORD?.replace(/\s+/g, '')
+    }
+});
+
+const sendVerificationEmail = async (email, code) => {
+    try {
+        await transporter.sendMail({
+            from: `"Insight AI" <${process.env.APP_EMAIL}>`,
+            to: email,
+            subject: 'Verify your Insight Account',
+            html: `
+                <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                    <h2 style="color: #6d28d9; text-align: center;">Welcome to Insight AI!</h2>
+                    <p style="text-align: center; font-size: 16px;">To complete your signup, please use the verification code below:</p>
+                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+                        <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #111;">${code}</span>
+                    </div>
+                    <p style="text-align: center; color: #666; font-size: 14px;">If you didn't request this code, you can ignore this email.</p>
+                </div>
+            `
+        });
+        console.log(`Verification email sent to ${email}`);
+    } catch (error) {
+        console.error("Email sending failed:", error);
+    }
+};
 
 // Initialize Database
 initDB();
@@ -65,6 +97,39 @@ passport.deserializeUser(async (id, done) => {
 
 // --- STRATEGIES ---
 
+// Helper to Link/Update Social Account
+const linkSocialAccount = async (user, platform, profile, tokens) => {
+    try {
+        const [account, created] = await SocialAccount.findOrCreate({
+            where: {
+                platform,
+                platformUserId: profile.id
+            },
+            defaults: {
+                userId: user.id,
+                username: profile.username || profile.displayName,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                metadata: profile._json
+            }
+        });
+
+        if (!created) {
+            // Update existing
+            account.userId = user.id; // Ensure ownership (in case of re-linking)
+            account.accessToken = tokens.accessToken;
+            if (tokens.refreshToken) account.refreshToken = tokens.refreshToken;
+            account.username = profile.username || profile.displayName;
+            await account.save();
+        }
+
+        return account;
+    } catch (e) {
+        console.error(`Failed to link ${platform} account:`, e);
+        throw e;
+    }
+};
+
 // 1. Local Strategy (Username/Password)
 passport.use(new LocalStrategy(async (username, password, done) => {
     try {
@@ -80,87 +145,72 @@ passport.use(new LocalStrategy(async (username, password, done) => {
     }
 }));
 
-// 2. Google Strategy (Link to existing user)
+// 2. Google Strategy
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: "https://localhost:5000/auth/google/callback",
     scope: ['profile', 'email', 'https://www.googleapis.com/auth/youtube.readonly', 'https://www.googleapis.com/auth/yt-analytics.readonly'],
     passReqToCallback: true
-},
-    async function (req, accessToken, refreshToken, profile, cb) {
-        try {
-            if (!req.user) {
-                // If not logged in, we typically deny or create new. 
-                // For this app, we force Login first.
-                return cb(new Error("Please login with username/password first to connect accounts."));
-            }
-
-            // Update existing user with Google tokens
-            const user = await User.findByPk(req.user.id);
-            user.googleId = profile.id;
-            user.googleAccessToken = accessToken;
-            if (refreshToken) user.googleRefreshToken = refreshToken;
-            user.googleName = profile.displayName;
-            await user.save();
-
-            return cb(null, user);
-        } catch (err) {
-            return cb(err);
-        }
-    }
-));
+}, async (req, accessToken, refreshToken, profile, cb) => {
+    try {
+        if (!req.user) return cb(new Error("Please login first to connect accounts."));
+        await linkSocialAccount(req.user, 'youtube', profile, { accessToken, refreshToken });
+        return cb(null, req.user); // Return User, but data is in SocialAccounts
+    } catch (err) { return cb(err); }
+}));
 
 // 3. Facebook Strategy (Link to existing user)
-passport.use(new FacebookStrategy({
+// 3. Facebook Strategy
+passport.use('facebook', new FacebookStrategy({
     clientID: process.env.FACEBOOK_APP_ID,
     clientSecret: process.env.FACEBOOK_APP_SECRET,
-    callbackURL: "https://localhost:5000/auth/facebook/callback",
+    callbackURL: process.env.FACEBOOK_CALLBACK_URL || "https://localhost:5000/auth/facebook/callback",
     profileFields: ['id', 'displayName', 'photos', 'email'],
     authorizationURL: 'https://www.facebook.com/v18.0/dialog/oauth',
     tokenURL: 'https://graph.facebook.com/v18.0/oauth/access_token',
     enableProof: true,
     passReqToCallback: true
-},
-    async function (req, accessToken, refreshToken, profile, cb) {
-        try {
-            if (!req.user) {
-                return cb(new Error("Please login with username/password first."));
-            }
+}, async (req, accessToken, refreshToken, profile, cb) => {
+    try {
+        if (!req.user) return cb(new Error("Please login first."));
+        await linkSocialAccount(req.user, 'facebook', profile, { accessToken });
+        return cb(null, req.user);
+    } catch (err) { return cb(err); }
+}));
 
-            const user = await User.findByPk(req.user.id);
-            user.facebookId = profile.id;
-            user.facebookAccessToken = accessToken;
-            user.facebookName = profile.displayName;
+// 3.5 Instagram Strategy
+passport.use('instagram', new OAuth2Strategy({
+    authorizationURL: 'https://www.instagram.com/oauth/authorize',
+    tokenURL: 'https://api.instagram.com/oauth/access_token',
+    clientID: process.env.INSTAGRAM_APP_ID,
+    clientSecret: process.env.INSTAGRAM_APP_SECRET,
+    callbackURL: process.env.INSTAGRAM_CALLBACK_URL || "https://localhost:5000/auth/instagram/callback",
+    scope: ['instagram_business_basic', 'instagram_business_manage_insights', 'instagram_business_content_publish'],
+    state: true,
+    passReqToCallback: true
+}, async (req, accessToken, refreshToken, params, profile, cb) => {
+    try {
+        if (!req.user) return cb(new Error("Please login first."));
 
-            // Check State to see if we are connecting Instagram or Facebook specifically
-            // Note: req.query.state might not be available here directly depending on Passport version, 
-            // but we can check the session or pass state in the route.
-            // Actually, passport-facebook verifies state automatically.
-            // To be robust: We will set BOTH to true if generic, or specific if state is passed.
-            // However, getting `req.query` inside the verify callback is reliable with passReqToCallback: true.
+        // Exchange for Long-Lived
+        const exchangeRes = await fetch(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.INSTAGRAM_APP_SECRET}&access_token=${accessToken}`);
+        const exchangeData = await exchangeRes.json();
+        const longLivedToken = exchangeData.access_token || accessToken;
 
-            const state = req.query.state;
+        // Fetch Profile
+        const userRes = await fetch(`https://graph.instagram.com/me?fields=id,username,account_type&access_token=${longLivedToken}`);
+        const userData = await userRes.json();
 
-            if (state === 'instagram') {
-                user.isInstagramConnected = true;
-            } else if (state === 'facebook') {
-                user.isFacebookConnected = true;
-            } else {
-                // If no state provided (legacy), maybe connect both? Or just Facebook?
-                // Let's default to Facebook if no state, but safest is to require state for separation.
-                // For now, if generic /auth/facebook was called, we assume Facebook.
-                user.isFacebookConnected = true;
-            }
+        const igProfile = { id: userData.id, username: userData.username, _json: userData };
+        await linkSocialAccount(req.user, 'instagram', igProfile, { accessToken: longLivedToken });
 
-            await user.save();
-
-            return cb(null, user);
-        } catch (err) {
-            return cb(err);
-        }
+        return cb(null, req.user);
+    } catch (err) {
+        console.error("Instagram Auth Error:", err);
+        return cb(err);
     }
-));
+}));
 
 // 4. Twitter Strategy
 passport.use(new TwitterStrategy({
@@ -168,39 +218,42 @@ passport.use(new TwitterStrategy({
     consumerSecret: process.env.TWITTER_CONSUMER_SECRET || 'mock_secret',
     callbackURL: "https://localhost:5000/auth/twitter/callback",
     passReqToCallback: true
-},
-    async function (req, token, tokenSecret, profile, cb) {
-        try {
-            if (!req.user) {
-                return cb(new Error("Please login with username/password first to connect Twitter."));
-            }
-            const user = await User.findByPk(req.user.id);
-            user.twitterId = profile.id;
-            user.twitterAccessToken = token;
-            user.twitterName = profile.username || profile.displayName;
-            await user.save();
-            return cb(null, user);
-        } catch (err) {
-            return cb(err);
-        }
-    }
-));
+}, async (req, token, tokenSecret, profile, cb) => {
+    try {
+        if (!req.user) return cb(new Error("Please login first."));
+        await linkSocialAccount(req.user, 'twitter', profile, { accessToken: token, refreshToken: tokenSecret });
+        return cb(null, req.user);
+    } catch (err) { return cb(err); }
+}));
 
 
 // --- ROUTES ---
 
 // Login Route
-app.post('/auth/login', passport.authenticate('local'), (req, res) => {
+app.post('/auth/login', passport.authenticate('local'), async (req, res) => {
+    // Fetch connected accounts
+    const accounts = await SocialAccount.findAll({ where: { userId: req.user.id } });
+
+    // Map to connections object
+    const connections = {
+        google: accounts.some(a => a.platform === 'youtube'),
+        facebook: accounts.some(a => a.platform === 'facebook'),
+        instagram: accounts.some(a => a.platform === 'instagram'),
+        twitter: accounts.some(a => a.platform === 'twitter'),
+        // Detailed list
+        all: accounts.map(a => ({
+            id: a.id,
+            platform: a.platform,
+            username: a.username,
+            platformUserId: a.platformUserId
+        }))
+    };
+
     res.json({
         success: true,
         user: req.user.username,
-        user: req.user.username,
-        connections: {
-            google: !!req.user.googleAccessToken,
-            facebook: req.user.isFacebookConnected,
-            instagram: req.user.isInstagramConnected,
-            twitter: !!req.user.twitterAccessToken
-        }
+        email: req.user.email,
+        connections
     });
 });
 
@@ -222,22 +275,50 @@ app.post('/auth/signup', async (req, res, next) => {
 
         // Create User
         const hash = await bcrypt.hash(password, 10);
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
         const user = await User.create({
             username,
             email,
             fullName,
-            password_hash: hash
+            password_hash: hash,
+            verificationCode: verificationCode // Store code
         });
+
+        // Send Email
+        await sendVerificationEmail(email, verificationCode);
 
         // Auto Login
         req.login(user, (err) => {
             if (err) return next(err);
-            res.json({ success: true, user: user.username });
+            res.json({ success: true, user: user.username, userId: user.id });
         });
 
     } catch (e) {
         console.error('Signup error:', e);
         res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+// Verify Email Route
+app.post('/auth/verify', async (req, res) => {
+    try {
+        const { userId, code } = req.body;
+        const user = await User.findByPk(userId);
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        if (user.verificationCode == code) { // Allow string/number comparison
+            user.isVerified = true;
+            user.verificationCode = null; // Clear code
+            await user.save();
+            return res.json({ message: 'Verification successful' });
+        } else {
+            return res.status(400).json({ error: 'Invalid code' });
+        }
+    } catch (e) {
+        console.error("Verification error:", e);
+        res.status(500).json({ error: 'Verification failed' });
     }
 });
 
@@ -263,25 +344,21 @@ app.get('/auth/google/callback',
     });
 
 app.get('/auth/facebook', passport.authenticate('facebook', {
-    scope: ['public_profile', 'pages_show_list', 'instagram_basic', 'instagram_manage_insights', 'pages_read_engagement'],
-    state: 'facebook'
+    scope: ['public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_manage_posts']
 }));
 
-// Route specifically for Instagram connection (still uses Facebook OAuth but sets state)
-app.get('/auth/instagram', passport.authenticate('facebook', {
-    scope: ['public_profile', 'pages_show_list', 'instagram_basic', 'instagram_manage_insights', 'pages_read_engagement'],
-    state: 'instagram'
-}));
+app.get('/auth/instagram', passport.authenticate('instagram'));
 
 app.get('/auth/facebook/callback',
     passport.authenticate('facebook', { failureRedirect: `${host}/app/settings?error=true` }),
     (req, res) => {
-        // Redirect based on what was connected.
-        // We can check req.user flags or req.query.state if preserved in session, 
-        // but simplest is to just redirect to settings.
-        // If we want to show a specific "Connected Instagram" message, we can pass a query param.
-        const state = req.query.state;
-        res.redirect(`${host}/app/settings?connected=${state || 'facebook'}`);
+        res.redirect(`${host}/app/settings?connected=facebook`);
+    });
+
+app.get('/auth/instagram/callback',
+    passport.authenticate('instagram', { failureRedirect: `${host}/app/settings?error=true` }),
+    (req, res) => {
+        res.redirect(`${host}/app/settings?connected=instagram`);
     });
 
 app.get('/auth/twitter', passport.authenticate('twitter'));
@@ -300,6 +377,24 @@ const isAuthenticated = (req, res, next) => {
     }
     res.status(401).json({ error: 'Not authenticated' });
 };
+
+// Onboarding Submission Route
+app.post('/api/user/onboarding', isAuthenticated, async (req, res) => {
+    try {
+        const { answers } = req.body;
+        const user = await User.findByPk(req.user.id);
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        user.onboardingAnswers = answers;
+        await user.save();
+
+        res.json({ success: true, message: 'Onboarding completed' });
+    } catch (e) {
+        console.error("Onboarding Error:", e);
+        res.status(500).json({ error: 'Failed to save onboarding data' });
+    }
+});
 
 // API Routes
 app.get('/api/status', (req, res) => {
@@ -407,51 +502,23 @@ app.get('/api/insights/youtube', isAuthenticated, async (req, res) => {
 
 app.get('/api/insights/instagram', isAuthenticated, async (req, res) => {
     try {
-        if (!req.user.facebookAccessToken) {
+        if (!req.user.instagramAccessToken) {
             return res.status(400).json({ error: 'Not connected to Instagram' });
         }
 
-        const accessToken = req.user.facebookAccessToken;
+        const accessToken = req.user.instagramAccessToken;
+        const igUserId = req.user.instagramId || 'me'; // Use stored ID or 'me'
 
-        // 1. Get User's Pages
-        const pagesRes = await fetch(`https://graph.facebook.com/v18.0/me/accounts?access_token=${accessToken}`);
-        const pagesData = await pagesRes.json();
-
-        if (!pagesData.data || pagesData.data.length === 0) {
-            return res.status(404).json({ error: 'No Facebook Pages found. Instagram must be linked to a Page.' });
-        }
-
-        // 2. Find Page with Instagram Business Account
-        let igUserId = null;
-        for (const page of pagesData.data) {
-            const igRes = await fetch(`https://graph.facebook.com/v18.0/${page.id}?fields=instagram_business_account&access_token=${accessToken}`);
-            const igData = await igRes.json();
-            if (igData.instagram_business_account) {
-                igUserId = igData.instagram_business_account.id;
-                break;
-            }
-        }
-
-        if (!igUserId) {
-            return res.status(404).json({ error: 'No Instagram Business Account linked to your Facebook Pages.' });
-        }
-
-        // 3. Get Instagram Insights
-        const params = new URLSearchParams({
-            metric: 'impressions,reach,profile_views',
-            period: 'day',
-            access_token: accessToken
-        });
-
-        const insightsRes = await fetch(`https://graph.facebook.com/v18.0/${igUserId}/insights?${params}`);
-        const insightsData = await insightsRes.json();
-
-        // Get Basic Info
-        const userRes = await fetch(`https://graph.facebook.com/v18.0/${igUserId}?fields=username,followers_count,media_count&access_token=${accessToken}`);
+        // 1. Get Basic Info
+        const userRes = await fetch(`https://graph.instagram.com/${igUserId}?fields=username,followers_count,media_count,id&access_token=${accessToken}`);
         const userData = await userRes.json();
 
-        // 4. Get Media Engagement
-        const mediaRes = await fetch(`https://graph.facebook.com/v18.0/${igUserId}/media?fields=like_count,comments_count,media_type,timestamp&limit=50&access_token=${accessToken}`);
+        if (userData.error) {
+            throw new Error(userData.error.message);
+        }
+
+        // 2. Get Media & Engagement
+        const mediaRes = await fetch(`https://graph.instagram.com/${igUserId}/media?fields=like_count,comments_count,media_type,timestamp,id,caption&limit=50&access_token=${accessToken}`);
         const mediaData = await mediaRes.json();
 
         let engagement = 0;
@@ -462,10 +529,11 @@ app.get('/api/insights/instagram', isAuthenticated, async (req, res) => {
         if (mediaData.data) {
             recent_posts = mediaData.data.map((media) => ({
                 id: media.id,
-                type: media.media_type, // IMAGE, VIDEO, CAROUSEL_ALBUM
+                type: media.media_type,
                 likes: media.like_count || 0,
                 comments: media.comments_count || 0,
-                timestamp: media.timestamp
+                timestamp: media.timestamp,
+                caption: media.caption
             }));
 
             mediaData.data.forEach((media) => {
@@ -475,12 +543,30 @@ app.get('/api/insights/instagram', isAuthenticated, async (req, res) => {
             });
         }
 
+        // 3. Get Insights (If available for this account type)
+        // Note: 'instagram_business_basic' allows reading insights
+        let insights = [];
+        try {
+            const params = new URLSearchParams({
+                metric: 'impressions,reach,profile_views',
+                period: 'day',
+                access_token: accessToken
+            });
+            const insightsRes = await fetch(`https://graph.instagram.com/${igUserId}/insights?${params}`);
+            const insightsData = await insightsRes.json();
+            if (insightsData.data) {
+                insights = insightsData.data;
+            }
+        } catch (e) {
+            console.warn("Failed to fetch IG Insights (Account might not be Business/Creator):", e);
+        }
+
         res.json({
             platform: 'instagram',
             username: userData.username,
-            followers: userData.followers_count,
-            posts: userData.media_count,
-            insights: insightsData.data,
+            followers: userData.followers_count || 0, // followers_count might need specific permissions
+            posts: userData.media_count || 0,
+            insights: insights,
             engagement: engagement,
             totalLikes: likes,
             totalComments: comments,
@@ -489,7 +575,7 @@ app.get('/api/insights/instagram', isAuthenticated, async (req, res) => {
 
     } catch (error) {
         console.error('Instagram API Error:', error);
-        res.status(500).json({ error: 'Failed to fetch Instagram insights' });
+        res.status(500).json({ error: 'Failed to fetch Instagram insights', details: error.message });
     }
 });
 
@@ -587,440 +673,58 @@ app.get('/api/insights/twitter', isAuthenticated, async (req, res) => {
 
 app.post('/api/ai/analyze', isAuthenticated, async (req, res) => {
     try {
-        const { stats, query, feature_type, context } = req.body; // feature_type: 'dashboard' (default), 'viral-predictor', etc.
+        const { stats, query, feature_type, context } = req.body;
 
         if (!process.env.GEMINI_API_KEY) {
             return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         }
 
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // const model = genAI.getGenerativeModel({ model: "gemma-3-27b-it" }); //gemma-3-27b-it
-
-        let systemPrompt = "";
-        let userPrompt = "";
-        let selectedModel = "gemma-3-27b-it"
+        let result;
 
         switch (feature_type) {
             case 'viral-predictor':
-                systemPrompt = `
-                You are a Viral Content Predictor AI.
-                Analyze the user's uploaded content context or previous top posts to predict virality.
-                
-                Input Context: ${JSON.stringify(context || {})}
-                
-                You MUST return a valid JSON object:
-                {
-                    "score": 85, (0-100 integer),
-                    "prediction": "High potential for virality due to...",
-                    "retention_est": "45s",
-                    "improvement_tips": ["Tip 1", "Tip 2"],
-                    "factors": [
-                        { "name": "Hook", "score": 90, "comment": "Strong visual hook" },
-                        { "name": "Pacing", "score": 70, "comment": "Could be faster" },
-                        { "name": "Audio", "score": 80, "comment": "Trending audio detected" }
-                    ]
-                }
-                `;
-                userPrompt = `Analyze this content idea/thumbnail context: ${query}`;
+                result = await Agents.analyzeViralPotential(context, query);
                 break;
-
             case 'trend-radar':
-                // Fetch real trends
-                let trendData = "";
-                try {
-                    // Fetch Daily Trends for US (most robust)
-                    const trendsRes = await googleTrends.dailyTrends({ geo: 'US' });
-                    console.log(trendsRes);
-                    const trendsJson = JSON.parse(trendsRes);
-                    // Extract just the titles to save token space
-                    const days = trendsJson.default.trendingSearchesDays || [];
-                    const simpleTrends = days.slice(0, 2).map(day =>
-                        day.trendingSearches.map(t => ({ title: t.title.query, traffic: t.formattedTraffic }))
-                    ).flat();
-                    trendData = JSON.stringify(simpleTrends);
-                } catch (e) {
-                    console.error("Google Trends API Failed", e);
-                    trendData = "Unable to fetch live Google Trends. Rely on internal knowledge.";
-                }
-
-                systemPrompt = `
-                You are a Trend Spotter AI.
-                Analyze the provided Real-Time Google Trends data AND your internal knowledge to identify 4-5 emerging trends relevant to the user's Niche.
-                
-                User Niche/Interest: "${query || 'General'}"
-                Real-Time Google Trends Data: ${trendData}
-
-                You MUST return a valid JSON object:
-                {
-                    "niche": "${query}",
-                    "trends": [
-                        { "name": "Trend Name", "growth": "+450%", "category": "Tech", "relevance": "High" },
-                        { "name": "Trend Name", "growth": "+200%", "category": "Lifestyle", "relevance": "Medium" }
-                    ],
-                    "summary": "Brief analysis of why these matter."
-                }
-                `;
-                userPrompt = `Find trends for: ${query}`;
+                result = await Agents.analyzeTrends(context, query);
                 break;
-
             case 'content-dna':
-                systemPrompt = `
-                You are a Brand Identity Expert AI.
-                Analyze the user's recent content (captions, performance, topics) to decode their "Content DNA".
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "archetype": "The Sage", (e.g. Jester, Ruler, Magician),
-                    "voice": ["Professional", "Data-Driven", "Empathetic"],
-                    "traits": [
-                        { "name": "Educational Value", "score": 90 },
-                        { "name": "Humor", "score": 20 },
-                        { "name": "Visual Aesthetics", "score": 75 }
-                    ],
-                    "winning_formula": "Your best content combines deep industry analysis with minimalist visuals.",
-                    "consistency_score": 85
-                }
-                `;
-                userPrompt = `Analyze the DNA of this content profile.`;
+                result = await Agents.analyzeContentDNA(context, query);
                 break;
-
             case 'audience-clone':
-                systemPrompt = `
-                You are an Audience Intelligence Expert.
-                Analyze the user's content to identify their ideal "Superfans" or "Cloned Audience".
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "top_persona": "The Aspiring Solopreneur",
-                    "demographics": {
-                        "age": "25-34",
-                        "gender": "60% Male, 40% Female",
-                        "location": "Top Tier Cities",
-                        "active_hours": "8pm - 11pm"
-                    },
-                    "psychographics": [
-                        "Values freedom and autonomy",
-                        "Struggles with consistency",
-                        "Loves productivity hacks"
-                    ],
-                    "content_preferences": [
-                        { "type": "Tutorials", "score": 90 },
-                        { "type": "Case Studies", "score": 75 },
-                        { "type": "Motivation", "score": 60 }
-                    ]
-                }
-                `;
-                userPrompt = `Generate the deep audience clone profile for this creator.`;
+                result = await Agents.analyzeAudienceClone(context, query);
                 break;
-
             case 'caption-wizard':
-                systemPrompt = `
-                You are a Viral Social Media Copywriter.
-                Generate 3 distinct caption options for the user's post idea.
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "captions": [
-                        {
-                            "text": "Rainy days = Deep focus mode 🌧️☕ What's your go-to productivity hack? #WorkLife",
-                            "score": 94,
-                            "explanation": "Uses a reliable relatability hook + question for engagement."
-                        },
-                        {
-                            "text": "POV: You found the perfect corner. 💻✨",
-                            "score": 88,
-                            "explanation": "Short, trendy 'POV' format works well for Reels."
-                        },
-                        {
-                            "text": "Just me, my laptop, and the sound of rain. ⛈️🚀 #Grind",
-                            "score": 82,
-                            "explanation": "Minimalist and aesthetic."
-                        }
-                    ]
-                }
-                `;
-                userPrompt = `Generate viral captions for this post description: "${query}"`;
+                result = await Agents.generateCaptions(context, query);
                 break;
-
             case 'post-mortem':
-                systemPrompt = `
-                You are a Social Media Content Doctor.
-                Analyze the provided post context to determine why it underperformed (or how to improve it).
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "diagnosis": "The hook was too slow and visual lighting was poor.",
-                    "score": 45,
-                    "autopsy_report": [
-                        { "issue": "Hook retention", "severity": "Critical", "fix": "Cut the first 3 seconds of the intro." },
-                        { "issue": "Hashtag irrelevance", "severity": "Moderate", "fix": "Replace generic #fun with niche tags." },
-                        { "issue": "Call to Action", "severity": "Low", "fix": "Add a clear question at the end." }
-                    ],
-                    "revived_version": "Use this hook instead: 'Stop making this mistake...'"
-                }
-                `;
-                userPrompt = `Perform an autopsy on this content: "${query}"`;
+                result = await Agents.analyzePostMortem(context, query);
                 break;
-
-
-
-            case 'generate-report':
-                systemPrompt = `
-                You are a Chief Strategy Officer AI for a social media brand.
-                Your goal is to write a professional, high-level strategic report based on the provided data.
-                
-                Context Data:
-                ${JSON.stringify(context || {})}
-                
-                Report Type: "${query}"
-                
-                Guidelines:
-                1. Use standard Markdown formatting (# Heading 1, ## Heading 2, **bold**, - list).
-                2. Be professional, direct, and data-driven.
-                3. Do NOT use JSON output. Write a document.
-                4. Structure the report logically based on the Report Type.
-                5. Use the cached AI insights (DNA, Trend, Viral) if available in the context to support your arguments.
-                
-                Example Structure:
-                # [Report Title]
-                ## Executive Summary
-                [Brief overview]
-                
-                ## Key Performance Indicators
-                [Analysis of provided stats]
-                
-                ## Strategic Insights
-                - **Viral Potential**: [Based on Viral Predictor context]
-                - **Content DNA**: [Based on DNA context]
-                
-                ## Action Plan
-                1. [Action 1]
-                2. [Action 2]
-                `;
-                userPrompt = `Generate the ${query} for this user.`;
-                break;
-
             case 'competitor-ghost':
-                systemPrompt = `
-                You are a Competitive Intelligence Agent.
-                Analyze the provided competitor (handle/name) to find "Strategy Gaps" the user can exploit.
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "competitor_profile": {
-                        "name": "${query || 'Competitor'}",
-                        "weakness": "High quantity, low engagement depth",
-                        "strength": "Visual polish"
-                    },
-                    "gaps": [
-                        { "gap": "No community interaction", "opportunity": "Reply to their ignored comments to steal attention." },
-                        { "gap": "Missing beginner tutorials", "opportunity": "Create the 'Zero to One' guide they lack." },
-                        { "gap": "Inconsistent posting times", "opportunity": "Own the 9am slot they miss." }
-                    ],
-                    "stealable_tactics": [
-                        "Their 'Day in the Life' hook structure",
-                        "The way they use carousel swipes"
-                    ]
-                }
-                `;
-                userPrompt = `Ghost this competitor: "${query}"`;
+                result = await Agents.analyzeCompetitorGhost(context, query);
                 break;
-
             case 'content-strategy':
-                systemPrompt = `
-                You are a Lead Content Strategist.
-                Create a 1-week micro-content strategy based on the user's goal.
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "strategy_name": "The Authority Builder Protocol",
-                    "focus": "High-Value Educational Content",
-                    "calendar": [
-                        { "day": "Mon", "format": "Reel", "topic": "Industry Myth Busting", "why": "Establishes authority immediately." },
-                        { "day": "Tue", "format": "Carousel", "topic": "Step-by-Step Tutorial", "why": "High save-rate content for distribution." },
-                        { "day": "Wed", "format": "Story", "topic": "Behind the Scenes work", "why": "Builds trust and authenticity." },
-                        { "day": "Thu", "format": "Text Post", "topic": "Controversial Opinion", "why": "Drives engagement and comments." },
-                        { "day": "Fri", "format": "Reel", "topic": "Client Success Story", "why": "Social proof before the weekend." }
-                    ],
-                    "growth_hack": "Reply to every comment in the first hour with a question."
-                }
-                `;
-                userPrompt = `Create a strategy for this goal: "${query}"`;
+                result = await Agents.generateContentStrategy(context, query);
                 break;
-
             case 'comparison':
-                systemPrompt = `
-                You are a Data Benchmarking Analyst.
-                Compare the user's current performance against top performers in their niche.
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "niche": "Tech Education",
-                    "metrics": [
-                        { "label": "Engagement Rate", "user": "4.2%", "benchmark": "5.8%", "status": "Underperforming" },
-                        { "label": "Save Rate", "user": "1.5%", "benchmark": "3.0%", "status": "Critical" },
-                        { "label": "Consistency", "user": "3 posts/week", "benchmark": "5 posts/week", "status": "Good" },
-                        { "label": "Story Views", "user": "15%", "benchmark": "10%", "status": "Elite" }
-                    ],
-                    "insight": "You are winning on Story loyalty but losing on saveable feed content.",
-                    "action_plan": "Shift 2 posts per week to 'Saveable Carousels' to boost that 1.5% save rate."
-                }
-                `;
-                userPrompt = `Compare my stats in the "${query || 'General'}" niche.`;
+                result = await Agents.analyzeComparison(context, query);
                 break;
-
             case 'smart-scheduling':
-                systemPrompt = `
-                You are an AI Scheduling Optimization Engine.
-                Analyze the user's audience behavior (mocked or provided) to determine the absolute best times to post for maximum engagement.
-
-                Input Context: ${JSON.stringify(context || {})}
-
-                You MUST return a valid JSON object:
-                {
-                    "best_times": [
-                        { "day": "Monday", "time": "09:00 AM", "reason": "Morning commute peak", "confidence": "High" },
-                        { "day": "Wednesday", "time": "12:30 PM", "reason": "Lunch break scrolling", "confidence": "Medium" },
-                        { "day": "Friday", "time": "04:00 PM", "reason": "Pre-weekend excitement", "confidence": "Very High" },
-                        { "day": "Saturday", "time": "10:00 AM", "reason": "Lazy morning browsing", "confidence": "High" }
-                    ],
-                    "heatmap_data": { "Mon": 9, "Tue": 6, "Wed": 8, "Thu": 5, "Fri": 10, "Sat": 7, "Sun": 4 },
-                    "strategy_note": "Post your heavy hitters on Friday afternoons."
-                }
-                `;
-                userPrompt = `Optimize schedule for: "${query || 'General Engagement'}"`;
+                result = await Agents.analyzeSmartScheduling(context, query);
                 break;
-
             case 'generate-report':
-                selectedModel = "gemini-3-flash-preview"
-                systemPrompt = `
-                You are a Professional Social Media Analyst.
-                Generate a comprehensive report in Markdown format based on the user's data.
-
-                Structure:
-                1. **Executive Summary**: High-level overview.
-                2. **Key Metrics Table**: Use Markdown table.
-                3. **Visual Analysis**:
-                   - You MUST include at least 2 charts.
-                   - To insert a chart, strictly use this format:
-                     <<<CHART_START
-                     {
-                       "type": "bar",
-                       "data": {
-                         "labels": ["Mon", "Tue", "Wed", "Thu", "Fri"],
-                         "datasets": [{ "label": "Engagement", "data": [12, 19, 3, 5, 2] }]
-                       }
-                     }
-                     CHART_END>>>
-                   - Do NOT try to encode the URL yourself. Just provide the valid JSON inside the tags.
-                4. **Strategic Recommendations**: Bullet points.
-
-                Input Context: ${JSON.stringify(context || {})}
-                `;
-                userPrompt = `Generate a "${query || 'Executive Summary'}" report.`;
-                userPrompt = `Generate a "${query || 'Executive Summary'}" report.`;
+                result = await Agents.generateReport(context, query);
                 break;
-
             case 'ask-ai':
-                systemPrompt = `
-                You are a Social Media Consultant Chatbot.
-                Answer the user's questions about their social media performance, strategy, and content.
-                Be helpful, encouraging, and data-driven.
-                
-                Input Context: ${JSON.stringify(context || {})}
-                
-                You MUST return a valid JSON object:
-                {
-                    "answer": "Your detailed answer here.",
-                    "follow_up": ["Follow up question 1?", "Follow up question 2?"]
-                }
-                `;
-                userPrompt = `User Question: "${query}"`;
+                result = await Agents.askAI(context, query);
                 break;
-
             case 'dashboard':
             default:
-                systemPrompt = `
-                You are an expert Social Media Analyst Agent.
-                Analyze the provided social media stats and the user's query.
-
-                You MUST return a valid JSON object in the following format:
-                {
-                    "summary": "Brief 1-sentence summary of performance",
-                    "insights": [
-                        { "title": "Insight Title", "description": "Insight Details", "sentiment": "positive|neutral|negative" },
-                        { "title": "Insight Title", "description": "Insight Details", "sentiment": "positive|neutral|negative" }
-                    ],
-                    "actionable_tips": [
-                        "Tip 1",
-                        "Tip 2",
-                        "Tip 3"
-                    ],
-                    "chart_data": [
-                        { "name": "Mon", "engagement": 1200, "reach": 3000 },
-                        { "name": "Tue", "engagement": 1500, "reach": 3500 },
-                        { "name": "Wed", "engagement": 1100, "reach": 2800 },
-                        { "name": "Thu", "engagement": 1800, "reach": 4000 },
-                        { "name": "Fri", "engagement": 2200, "reach": 4500 },
-                        { "name": "Sat", "engagement": 2500, "reach": 4800 },
-                        { "name": "Sun", "engagement": 2100, "reach": 4100 }
-                    ]
-                }
-                Do not include markdown code blocks. Return raw JSON only.
-                Generate realistic "chart_data" (LAST 7 DAYS) based on the stats provided. Simulate a realistic trend.
-                `;
-                userPrompt = `
-                User Stats: ${JSON.stringify(stats)}
-                User Query: "${query || 'General performance analysis'}"
-                `;
+                result = await Agents.analyzeDashboard(context, query, stats);
                 break;
         }
 
-        console.log(userPrompt);
-        const model = genAI.getGenerativeModel({ model: selectedModel }); //gemma-3-27b-it
-        const result = await model.generateContent([systemPrompt, userPrompt]);
-        const response = await result.response;
-        const text = response.text();
-
-        // Special handling for Report Generation (Markdown output)
-        if (feature_type === 'generate-report') {
-            const processedText = text.replace(/<<<CHART_START([\s\S]*?)CHART_END>>>/g, (match, jsonString) => {
-                try {
-                    const cleanJson = jsonString.trim();
-                    const encoded = encodeURIComponent(cleanJson);
-                    return `![Chart](https://quickchart.io/chart?c=${encoded})`;
-                } catch (e) {
-                    return '> *Error generating chart*';
-                }
-            });
-            return res.json({ report: processedText });
-        }
-
-        // Default handling (JSON output)
-        const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
-        try {
-            const jsonData = JSON.parse(cleanText);
-            res.json(jsonData);
-        } catch (e) {
-            console.error("AI JSON Parse Error", e);
-            console.error("Raw Text:", text);
-            res.status(500).json({ error: "Failed to parse AI response" });
-        }
+        res.json(result);
 
     } catch (error) {
         console.error('AI Error:', error);
@@ -1037,73 +741,8 @@ app.post('/api/ai/deep-analysis', isAuthenticated, async (req, res) => {
             return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         }
 
-        // Initialize new SDK
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-        let contents = [];
-
-        if (platform === 'youtube') {
-            contents.push({
-                fileData: {
-                    fileUri: url,
-                    mimeType: "video/mp4"
-                }
-            });
-        } else if (platform === 'instagram') {
-            const isVideo = url.includes('.mp4') || (postData && postData.type === 'VIDEO');
-            const mimeType = isVideo ? "video/mp4" : "image/jpeg";
-            contents.push({
-                fileData: {
-                    fileUri: url,
-                    mimeType: mimeType
-                }
-            });
-        }
-
-        contents.push({
-            text: `
-            Analyze this content in extreme detail. 
-            Identify:
-            1. Total Watch Time & Average Watch Time (estimate).
-            2. Skip Rate and specific timestamps where users likely skipped or dropped off.
-            3. Key Moments (timestamps) that were most engaging.
-            4. Sentiment analysis of the visual/audio content.
-            5. Provide a second-by-second breakdown of "Retention Score" (0-100) for the first 60 seconds (or duration).
-
-            Return ONLY a valid JSON object:
-            {
-                "overall_score": 88,
-                "metrics": {
-                    "avg_watch_time": "1m 45s",
-                    "skip_rate": "12%",
-                    "completion_rate": "45%"
-                },
-                "timeline_events": [
-                    { "time": "00:05", "event": "Hook", "type": "positive", "desc": "Strong visual hook captured attention." },
-                    { "time": "00:25", "event": "Drop-off", "type": "negative", "desc": "Pacing slowed down here." }
-                ],
-                "retention_graph": [
-                    { "second": 0, "score": 100 },
-                    { "second": 5, "score": 95 },
-                    { "second": 10, "score": 85 }
-                ],
-                "summary": "Detailed textual summary..."
-            }
-        `});
-
-        const modelName = "gemini-3-flash-preview";
-
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: contents,
-        });
-
-        const text = response.text;
-
-        let cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        let jsonResponse = JSON.parse(cleanJson);
-
-        res.json(jsonResponse);
+        const result = await Agents.runDeepAnalysis(platform, url, postData);
+        res.json(result);
 
     } catch (e) {
         console.error("Deep Analysis Error:", e);

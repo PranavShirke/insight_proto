@@ -10,6 +10,9 @@ import {
     Bot,
     User
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { useInsights } from '../../hooks/useInsights';
 
 const SUGGESTIONS = [
     { icon: TrendingUp, text: "Which post performed best last month?" },
@@ -24,6 +27,8 @@ const AskAI = () => {
     const [isTyping, setIsTyping] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
 
+    const { data: insightsData } = useInsights();
+
     const handleSend = async (text: string = query) => {
         if (!text.trim()) return;
 
@@ -33,13 +38,14 @@ const AskAI = () => {
         setIsTyping(true);
 
         try {
-            const res = await fetch('https://localhost:5000/api/ai/analyze', {
+            const res = await fetch('/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
                     feature_type: 'ask-ai',
-                    query: text
+                    query: text,
+                    context: insightsData // Pass the full insights data as context
                 })
             });
             const data = await res.json();
@@ -120,7 +126,11 @@ const AskAI = () => {
                                     ? 'bg-brand-primary text-black font-medium rounded-tr-none'
                                     : 'bg-white/10 text-gray-200 border border-white/5 rounded-tl-none'
                                     }`}>
-                                    {msg.content}
+                                    <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'prose-invert text-black' : 'prose-invert text-gray-200'}`}>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                            {msg.content}
+                                        </ReactMarkdown>
+                                    </div>
                                 </div>
                                 {msg.role === 'user' && (
                                     <div className="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center shrink-0">

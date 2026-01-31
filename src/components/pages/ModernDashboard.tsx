@@ -172,7 +172,7 @@ const ModernDashboard = () => {
         if (!queryText) return;
         setAiLoading(true);
         try {
-            const res = await fetch('https://localhost:5000/api/ai/analyze', {
+            const res = await fetch('/api/ai/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

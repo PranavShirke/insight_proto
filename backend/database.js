@@ -39,21 +39,53 @@ const User = sequelize.define('User', {
     facebookAccessToken: DataTypes.STRING,
     facebookName: DataTypes.STRING,
 
-    // Detailed Connection Flags
-    isInstagramConnected: {
+    instagramId: DataTypes.STRING,
+    instagramAccessToken: DataTypes.STRING,
+    instagramName: DataTypes.STRING,
+
+    // Onboarding & Verification
+    isVerified: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
     },
-    isFacebookConnected: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
+    verificationCode: DataTypes.STRING,
+    onboardingAnswers: {
+        type: DataTypes.JSON,
+        allowNull: true
     },
 
-    // Twitter Tokens
-    twitterId: DataTypes.STRING,
-    twitterAccessToken: DataTypes.STRING,
-    twitterName: DataTypes.STRING
+    // Organization Fields
+    accountType: {
+        type: DataTypes.STRING, // 'personal' or 'organization'
+        defaultValue: 'personal'
+    },
+    organizationName: DataTypes.STRING
 });
+
+// Define SocialAccount Model (For Multi-Account Support)
+const SocialAccount = sequelize.define('SocialAccount', {
+    userId: {
+        type: DataTypes.INTEGER,
+        allowNull: false
+    },
+    platform: {
+        type: DataTypes.STRING, // 'instagram', 'twitter', 'youtube', 'facebook'
+        allowNull: false
+    },
+    platformUserId: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    username: DataTypes.STRING,
+    accessToken: DataTypes.STRING,
+    refreshToken: DataTypes.STRING,
+    tokenExpiresAt: DataTypes.DATE,
+    metadata: DataTypes.JSON // Store extra info like profile pic, follower count at connect time
+});
+
+// Associations
+User.hasMany(SocialAccount, { foreignKey: 'userId', as: 'connectedAccounts' });
+SocialAccount.belongsTo(User, { foreignKey: 'userId' });
 
 // Sync and Seed
 export const initDB = async () => {
@@ -65,4 +97,4 @@ export const initDB = async () => {
     }
 };
 
-export { sequelize, User };
+export { sequelize, User, SocialAccount };

@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
     const navigate = useNavigate();
-    const { checkAuth, login } = useAuth();
+    const { login } = useAuth();
     const [formData, setFormData] = useState({ username: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -17,7 +17,7 @@ const Login = () => {
         setError('');
 
         try {
-            const res = await fetch('https://localhost:5000/auth/login', {
+            const res = await fetch('/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',

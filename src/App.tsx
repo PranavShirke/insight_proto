@@ -10,7 +10,8 @@ import AskAI from './components/pages/AskAI.tsx';
 import Reports from './components/pages/Reports.tsx';
 import DetailedAnalysis from './components/pages/DetailedAnalysis.tsx';
 import Login from './components/pages/Login';
-import Signup from './components/pages/Signup'; // Import Signup
+import Flags from './components/pages/Flags'; // Import Flags Page
+import { OnboardingFlow } from './components/pages/OnboardingFlow'; // Import New Onboarding Flow
 import { AuthProvider } from './context/AuthContext';
 import RequireAuth from './components/auth/RequireAuth';
 
@@ -21,7 +22,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
+          <Route path="/signup" element={<OnboardingFlow />} />
 
           {/* Protected Routes */}
           <Route element={<RequireAuth />}>
@@ -33,6 +34,7 @@ function App() {
               <Route path="detailed-analysis" element={<DetailedAnalysis />} />
               <Route path="ask-ai" element={<AskAI />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="flags" element={<Flags />} />
               <Route path="settings" element={<Settings />} />
             </Route>
           </Route>

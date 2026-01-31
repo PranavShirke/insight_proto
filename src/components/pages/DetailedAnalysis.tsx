@@ -62,7 +62,7 @@ const DetailedAnalysis = () => {
             : manualUrl;
 
         try {
-            const res = await fetch('https://localhost:5000/api/ai/deep-analysis', {
+            const res = await fetch('/api/ai/deep-analysis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -167,7 +167,7 @@ const DetailedAnalysis = () => {
                     {/* Action Area */}
                     <div className="bg-[#0f0f1a] border border-white/5 rounded-3xl p-6 min-h-[200px] flex flex-col items-center justify-center relative overflow-hidden">
 
-                        {!analyzing && !analysisResult && (
+                        {!analyzing && (
                             <div className="text-center z-10 max-w-md">
                                 <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <BarChart2 className="w-8 h-8 text-brand-primary" />
@@ -218,6 +218,7 @@ const DetailedAnalysis = () => {
                                 className="space-y-6"
                             >
                                 {/* Top Stats Row */}
+                                <h1 className="text-2xl font-bold text-white">Deep Analysis Result</h1>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div className="bg-white/5 border border-white/10 p-5 rounded-2xl">
                                         <p className="text-gray-400 text-xs font-medium uppercase tracking-wider mb-1">Overall Score</p>
