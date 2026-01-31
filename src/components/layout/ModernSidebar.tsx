@@ -123,6 +123,18 @@ const ModernSidebar = () => {
                         </>
                     )}
                 </NavLink>
+
+                <NavLink
+                    to="/app/business"
+                    className={({ isActive }) => `flex items-center p-3.5 rounded-2xl transition-all duration-300 group ${isActive ? 'bg-white/10 text-white shadow-inner border border-white/5' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                >
+                    {({ isActive }) => (
+                        <>
+                            <BarChart2 size={20} className={isActive ? 'text-brand-primary' : ''} />
+                            <span className="hidden lg:block ml-3 font-medium text-sm">Business</span>
+                        </>
+                    )}
+                </NavLink>
             </nav>
 
             {/* Footer Items */}

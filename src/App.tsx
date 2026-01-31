@@ -11,6 +11,7 @@ import Reports from './components/pages/Reports.tsx';
 import DetailedAnalysis from './components/pages/DetailedAnalysis.tsx';
 import Login from './components/pages/Login';
 import Flags from './components/pages/Flags'; // Import Flags Page
+import BusinessAnalysis from './components/pages/BusinessAnalysis'; // Import Business Analysis Page
 import { OnboardingFlow } from './components/pages/OnboardingFlow'; // Import New Onboarding Flow
 import { AuthProvider } from './context/AuthContext';
 import RequireAuth from './components/auth/RequireAuth';
@@ -34,6 +35,7 @@ function App() {
               <Route path="detailed-analysis" element={<DetailedAnalysis />} />
               <Route path="ask-ai" element={<AskAI />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="business" element={<BusinessAnalysis />} />
               <Route path="flags" element={<Flags />} />
               <Route path="settings" element={<Settings />} />
             </Route>

@@ -10,7 +10,7 @@ const MOCK_FLAGS = [
         type: 'sentiment',
         severity: 'high',
         platform: 'twitter',
-        content: "This product is absolute garbage! #fail and others..." ,
+        content: "This product is absolute garbage! #fail and others...",
         reason: "Negative Sentiment Detected (>0.9)",
         status: 'pending',
         timestamp: '2025-05-15T10:30:00Z',

@@ -14,6 +14,8 @@ import bcrypt from 'bcrypt';
 import { initDB, User, SocialAccount } from './database.js';
 import * as Agents from './agents/index.js';
 import nodemailer from 'nodemailer';
+import { spawn } from 'child_process';
+import { getClient } from './agents/client.js';
 
 dotenv.config();
 
@@ -282,7 +284,7 @@ app.post('/auth/signup', async (req, res, next) => {
             email,
             fullName,
             password_hash: hash,
-            verificationCode: verificationCode // Store code
+            verificationCode: verificationCode, // Store code
         });
 
         // Send Email
@@ -397,8 +399,11 @@ app.post('/api/user/onboarding', isAuthenticated, async (req, res) => {
 });
 
 // API Routes
-app.get('/api/status', (req, res) => {
+app.get('/api/status', async (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ authenticated: false });
+
+    // Fetch connected accounts
+    const accounts = await SocialAccount.findAll({ where: { userId: req.user.id } });
 
     res.json({
         authenticated: true,
@@ -408,21 +413,38 @@ app.get('/api/status', (req, res) => {
         google: !!req.user.googleAccessToken,
         facebook: !!req.user.facebookAccessToken,
         twitter: !!req.user.twitterAccessToken,
-        user: req.user.fullName || req.user.username,
-        user: req.user.fullName || req.user.username,
         connections: {
-            google: !!req.user.googleAccessToken,
-            // Use specific flags now
-            facebook: req.user.isFacebookConnected,
-            instagram: req.user.isInstagramConnected,
-            twitter: !!req.user.twitterAccessToken
+            google: accounts.some(a => a.platform === 'youtube'),
+            facebook: accounts.some(a => a.platform === 'facebook'),
+            instagram: accounts.some(a => a.platform === 'instagram'),
+            twitter: accounts.some(a => a.platform === 'twitter'),
+            all: accounts.map(a => ({
+                id: a.id,
+                platform: a.platform,
+                username: a.username,
+                platformUserId: a.platformUserId
+            }))
         }
     });
 });
 
+// Helper to get tokens for a specific platform
+const getTokensForUser = async (userId, platform) => {
+    const account = await SocialAccount.findOne({
+        where: { userId, platform }
+    });
+    if (!account) return null;
+    return {
+        accessToken: account.accessToken,
+        refreshToken: account.refreshToken,
+        platformId: account.platformUserId
+    };
+};
+
 app.get('/api/insights/youtube', isAuthenticated, async (req, res) => {
     try {
-        if (!req.user.googleAccessToken) {
+        const tokens = await getTokensForUser(req.user.id, 'youtube');
+        if (!tokens) {
             return res.status(400).json({ error: 'Not connected to YouTube' });
         }
 
@@ -433,8 +455,8 @@ app.get('/api/insights/youtube', isAuthenticated, async (req, res) => {
         );
 
         oauth2Client.setCredentials({
-            access_token: req.user.googleAccessToken,
-            refresh_token: req.user.googleRefreshToken
+            access_token: tokens.accessToken,
+            refresh_token: tokens.refreshToken
         });
 
         const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
@@ -502,12 +524,14 @@ app.get('/api/insights/youtube', isAuthenticated, async (req, res) => {
 
 app.get('/api/insights/instagram', isAuthenticated, async (req, res) => {
     try {
-        if (!req.user.instagramAccessToken) {
+        const tokens = await getTokensForUser(req.user.id, 'instagram');
+        if (!tokens) {
             return res.status(400).json({ error: 'Not connected to Instagram' });
         }
 
-        const accessToken = req.user.instagramAccessToken;
-        const igUserId = req.user.instagramId || 'me'; // Use stored ID or 'me'
+        const accessToken = tokens.accessToken;
+        // If we stored the ID in the account model, use it. Otherwise default to 'me'
+        const igUserId = tokens.platformId || 'me';
 
         // 1. Get Basic Info
         const userRes = await fetch(`https://graph.instagram.com/${igUserId}?fields=username,followers_count,media_count,id&access_token=${accessToken}`);
@@ -581,11 +605,12 @@ app.get('/api/insights/instagram', isAuthenticated, async (req, res) => {
 
 app.get('/api/insights/facebook', isAuthenticated, async (req, res) => {
     try {
-        if (!req.user.isFacebookConnected) { // Use flag or token check
+        const tokens = await getTokensForUser(req.user.id, 'facebook');
+        if (!tokens) {
             return res.status(400).json({ error: 'Not connected to Facebook' });
         }
 
-        const accessToken = req.user.facebookAccessToken;
+        const accessToken = tokens.accessToken;
         if (!accessToken) return res.status(400).json({ error: 'No access token found' });
 
         // 1. Get User's Pages
@@ -747,6 +772,86 @@ app.post('/api/ai/deep-analysis', isAuthenticated, async (req, res) => {
     } catch (e) {
         console.error("Deep Analysis Error:", e);
         res.status(500).json({ error: 'Deep analysis failed', details: e.message });
+    }
+});
+
+// Business Analysis Route
+app.post('/api/business/analyze', isAuthenticated, async (req, res) => {
+    try {
+        const params = req.body;
+
+        const pythonProcess = spawn('python', ['models/predict.py']);
+        let dataString = '';
+        let errorString = '';
+
+        pythonProcess.stdin.write(JSON.stringify(params));
+        pythonProcess.stdin.end();
+
+        pythonProcess.stdout.on('data', (data) => {
+            dataString += data.toString();
+        });
+        pythonProcess.stderr.on('data', (data) => {
+            errorString += data.toString();
+        });
+
+        pythonProcess.on('close', async (code) => {
+            if (code !== 0) {
+                const errMsg = errorString || dataString || 'Unknown Python error';
+                console.error("Python script failed:", errMsg);
+                return res.status(500).json({ error: 'Prediction model failed.', details: errMsg });
+            }
+
+            try {
+                const predictions = JSON.parse(dataString);
+                if (predictions.error) {
+                    return res.status(500).json({ error: predictions.error });
+                }
+
+
+                const client = getClient();
+                const prompt = `
+                You are a Business Analyst.
+                Based on the following prediction stats for an influencer campaign:
+                - Predicted Unit Sales: ${predictions.predicted_sales}
+                - Net ROI: ${predictions.net_roi}%
+                - Total Campaign Cost: $${predictions.total_cost}
+                - Estimated Revenue: $${predictions.revenue}
+
+                Campaign Details:
+                - Niche: ${params.niche}
+                - Platform: ${params.platform}
+                - Followers: ${params.followers}
+                - Engagement: ${params.engagement}
+                - Duration: ${params.duration} days
+                - Product Price: $${params.price}
+
+                Please provide a detailed strategic analysis (in markdown).
+                1. Interpret the ROI (Is it good? risky?).
+                2. Suggest optimization tips for this specific niche and platform.
+                3. Conclude with a "Go/No-Go" recommendation.
+                `;
+
+                const response = await client.models.generateContent({
+                    model: 'gemma-3-27b-it',
+                    contents: [{ role: 'user', parts: [{ text: prompt }] }]
+                });
+
+                const analysisText = response.text;
+
+                res.json({
+                    ...predictions,
+                    analysis: analysisText
+                });
+
+            } catch (e) {
+                console.error("Analysis generation error:", e);
+                res.status(500).json({ error: 'Failed to generate AI analysis' });
+            }
+        });
+
+    } catch (e) {
+        console.error("Business API Error:", e);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 

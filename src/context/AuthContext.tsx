@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (data.authenticated) {
                     setUser({
                         username: data.username,
-                        fullName: data.user,
+                        fullName: data.fullName,
                         email: data.email,
                         connections: {
                             youtube: data.connections.google,

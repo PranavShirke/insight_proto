@@ -109,7 +109,7 @@ const Settings = () => {
                         <label className="text-sm text-dark-muted block">Email Address</label>
                         <div className="flex items-center px-4 py-3 bg-dark-bg border border-white/5 rounded-xl">
                             <Mail size={18} className="text-dark-muted mr-3" />
-                            <input type="email" defaultValue={user?.email || ''} className="bg-transparent border-none text-white focus:outline-none w-full" placeholder="your@email.com" readOnly />
+                            <input type="email" value={user?.email || ''} className="bg-transparent border-none text-white focus:outline-none w-full" placeholder="your@email.com" readOnly />
                         </div>
                     </div>
                 </div>
