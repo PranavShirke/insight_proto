@@ -18,3 +18,4 @@ fs.writeFileSync(path.join(certDir, 'key.pem'), pems.private);
 fs.writeFileSync(path.join(certDir, 'cert.pem'), pems.cert);
 
 console.log('Certificates generated in backend/certs/');
+

@@ -7,11 +7,22 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Color Palette - Dark & Neon */
+  /* Color Palette - Dark & Emerald/Green */
   --color-bg: #050505;
   --color-surface: #121212;
   --color-surface-hover: #1e1e1e;
   --color-text-primary: #ffffff;
+  --color-text-secondary: #94a3b8;
+  
+  /* Emerald/Green Accent Colors */
+  --color-accent-primary: #10b981;
+  --color-accent-secondary: #059669;
+  --color-accent-glow: rgba(16, 185, 129, 0.4);
+  
+  /* Glass Effect */
+  --glass-border: rgba(16, 185, 129, 0.1);
+  --glass-blur: 10px;
+  
   color-scheme: dark;
 }
 

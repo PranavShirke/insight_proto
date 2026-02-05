@@ -14,9 +14,9 @@ export default {
                     muted: '#94a3b8', // Muted text
                 },
                 brand: {
-                    primary: '#06b6d4', // Cyan 500
-                    secondary: '#3b82f6', // Blue 500
-                    accent: '#f59e0b', // Amber 500 (Contrast)
+                    primary: '#10b981', // Emerald 500
+                    secondary: '#059669', // Emerald 600
+                    accent: '#34d399', // Emerald 400 (Lighter accent)
                 }
             },
             fontFamily: {

@@ -441,6 +441,31 @@ const getTokensForUser = async (userId, platform) => {
     };
 };
 
+// PUT endpoint to save user settings
+app.put('/api/user/settings', isAuthenticated, async (req, res) => {
+    try {
+        const { fullName, preferences } = req.body;
+
+        // Update user in database
+        await req.user.update({
+            fullName: fullName || req.user.fullName,
+            preferences: JSON.stringify(preferences || {})
+        });
+
+        res.json({
+            success: true,
+            message: 'Settings saved successfully',
+            user: {
+                fullName: req.user.fullName,
+                preferences: preferences
+            }
+        });
+    } catch (error) {
+        console.error('Settings save error:', error);
+        res.status(500).json({ error: 'Failed to save settings' });
+    }
+});
+
 app.get('/api/insights/youtube', isAuthenticated, async (req, res) => {
     try {
         const tokens = await getTokensForUser(req.user.id, 'youtube');

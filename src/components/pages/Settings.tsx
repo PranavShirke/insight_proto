@@ -13,10 +13,26 @@ const Settings = () => {
         youtube: { connected: false, handle: '' }
     });
 
-
+    // Form state
+    const [fullName, setFullName] = useState('');
+    const [emailNotifications, setEmailNotifications] = useState(true);
+    const [aiSuggestions, setAiSuggestions] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState('');
 
     useEffect(() => {
         if (user) {
+            // Load user data
+            setFullName(user.fullName || '');
+
+            // Load preferences from localStorage
+            const savedPrefs = localStorage.getItem('userPreferences');
+            if (savedPrefs) {
+                const prefs = JSON.parse(savedPrefs);
+                setEmailNotifications(prefs.emailNotifications ?? true);
+                setAiSuggestions(prefs.aiSuggestions ?? true);
+            }
+
             setConnectedAccounts(prev => ({
                 ...prev,
                 youtube: {
@@ -44,6 +60,56 @@ const Settings = () => {
             window.history.replaceState({}, '', window.location.pathname);
         }
     }, [user]);
+
+    const handleSaveChanges = async () => {
+        setIsSaving(true);
+        setSaveMessage('');
+
+        try {
+            // Save preferences to localStorage
+            const preferences = {
+                emailNotifications,
+                aiSuggestions,
+                fullName
+            };
+            localStorage.setItem('userPreferences', JSON.stringify(preferences));
+            console.log('Saved to localStorage:', preferences);
+
+            // Try to save to backend
+            const response = await fetch('/api/user/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include', // Important for session cookies
+                body: JSON.stringify({
+                    fullName,
+                    preferences: {
+                        emailNotifications,
+                        aiSuggestions
+                    }
+                })
+            });
+
+            console.log('Backend response status:', response.status);
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Backend save successful:', data);
+                setSaveMessage('✓ Settings saved successfully!');
+            } else {
+                const errorText = await response.text();
+                console.error('Backend save failed:', response.status, errorText);
+                // Fallback: localStorage already saved
+                setSaveMessage('✓ Settings saved locally!');
+            }
+        } catch (error) {
+            console.error('Save error:', error);
+            // Fallback: localStorage already saved
+            setSaveMessage('✓ Settings saved locally!');
+        } finally {
+            setIsSaving(false);
+            setTimeout(() => setSaveMessage(''), 3000);
+        }
+    };
 
     const handleConnect = (platform: string) => {
         if (platform === 'youtube') {
@@ -102,7 +168,7 @@ const Settings = () => {
                         <label className="text-sm text-dark-muted block">Full Name</label>
                         <div className="flex items-center px-4 py-3 bg-dark-bg border border-white/5 rounded-xl">
                             <User size={18} className="text-dark-muted mr-3" />
-                            <input type="text" defaultValue={user?.fullName || ''} className="bg-transparent border-none text-white focus:outline-none w-full" placeholder="Your Name" />
+                            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-transparent border-none text-white focus:outline-none w-full" placeholder="Your Name" />
                         </div>
                     </div>
                     <div className="space-y-2">
@@ -199,8 +265,13 @@ const Settings = () => {
                             <p className="text-white font-medium">Email Notifications</p>
                             <p className="text-xs text-dark-muted">Receive weekly reports and alerts.</p>
                         </div>
-                        <div className="w-12 h-6 bg-brand-primary rounded-full relative cursor-pointer">
-                            <div className="absolute top-1 right-1 w-4 h-4 bg-white rounded-full"></div>
+                        <div
+                            onClick={() => setEmailNotifications(!emailNotifications)}
+                            className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${emailNotifications ? 'bg-brand-primary' : 'bg-gray-600'
+                                }`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${emailNotifications ? 'right-1' : 'left-1'
+                                }`}></div>
                         </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -208,17 +279,31 @@ const Settings = () => {
                             <p className="text-white font-medium">AI Suggestions</p>
                             <p className="text-xs text-dark-muted">Auto-generate content ideas based on trends.</p>
                         </div>
-                        <div className="w-12 h-6 bg-brand-primary rounded-full relative cursor-pointer">
-                            <div className="absolute top-1 right-1 w-4 h-4 bg-white rounded-full"></div>
+                        <div
+                            onClick={() => setAiSuggestions(!aiSuggestions)}
+                            className={`w-12 h-6 rounded-full relative cursor-pointer transition-colors ${aiSuggestions ? 'bg-brand-primary' : 'bg-gray-600'
+                                }`}
+                        >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${aiSuggestions ? 'right-1' : 'left-1'
+                                }`}></div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <div className="flex justify-end">
-                <button className="flex items-center gap-2 bg-brand-primary hover:bg-brand-secondary text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-brand-primary/20 transition-all">
+            <div className="flex justify-end items-center gap-4">
+                {saveMessage && (
+                    <p className="text-sm font-medium text-brand-primary animate-pulse">
+                        {saveMessage}
+                    </p>
+                )}
+                <button
+                    onClick={handleSaveChanges}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 bg-brand-primary hover:bg-brand-secondary disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-brand-primary/20 transition-all"
+                >
                     <Save size={18} />
-                    Save Changes
+                    {isSaving ? 'Saving...' : 'Save Changes'}
                 </button>
             </div>
 
