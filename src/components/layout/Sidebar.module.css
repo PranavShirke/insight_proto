@@ -1,0 +1,96 @@
+.sidebar {
+    width: 260px;
+    height: 100vh;
+    background: rgba(18, 18, 18, 0.6);
+    backdrop-filter: blur(var(--glass-blur));
+    border-right: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
+}
+
+.logoContainer {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 3rem;
+    padding: 0 0.5rem;
+}
+
+.logoIcon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--color-accent-primary), var(--color-accent-secondary));
+    border-radius: 8px;
+    box-shadow: 0 0 15px var(--color-accent-glow);
+}
+
+.logoText {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.highlight {
+    color: var(--color-accent-primary);
+}
+
+.nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.navItem {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-radius: 12px;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+}
+
+.navItem:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-primary);
+    transform: translateX(4px);
+}
+
+.active {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.1), transparent);
+    color: var(--color-accent-primary);
+    border-left: 3px solid var(--color-accent-primary);
+}
+
+.footer {
+    padding-top: 1rem;
+    border-top: 1px solid var(--glass-border);
+}
+
+.logoutBtn {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    padding: 0.8rem 1rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: color 0.3s;
+}
+
+.logoutBtn:hover {
+    color: #ef4444;
+    /* Red for logout */
+}
